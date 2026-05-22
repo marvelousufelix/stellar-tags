@@ -1,6 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import freighterApi from '@stellar/freighter-api'
-import * as StellarSdk from 'stellar-sdk'
 
 const CONTRACT_ID = 'CDNQ7OMHIFOLZHOKWQLOGDW7CF3DRMKXJC6OULNGNBWF4O4NO2NEIGER'
 const TREASURY_ADDRESS = 'GAAFWEZKDYPXLTQGKQ3F23TXWYQUDAYTDW7P7VUQSVJFW2GWC4Y6LWST'
@@ -12,6 +11,15 @@ const ANALYTICS_WINDOW_MS = 60 * 60 * 1000
 const ANALYTICS_PAGE_LIMIT = 200
 const ANALYTICS_MAX_PAGES = 5
 const ANALYTICS_REFRESH_MS = 60 * 1000
+
+let stellarSdkPromise
+const loadStellarSdk = () => {
+  if (!stellarSdkPromise) {
+    stellarSdkPromise = import('stellar-sdk')
+  }
+
+  return stellarSdkPromise
+}
 
 const normalizeNameTag = (value) => {
   const trimmed = value.trim()
@@ -28,7 +36,8 @@ const resolveRecipient = async (inputValue) => {
     return { error: 'Please enter a username or wallet address.' }
   }
 
-  if (StellarSdk.StrKey.isValidEd25519PublicKey(trimmed)) {
+  const { StrKey } = await loadStellarSdk()
+  if (StrKey.isValidEd25519PublicKey(trimmed)) {
     return { address: trimmed }
   }
 
@@ -474,6 +483,7 @@ function Dashboard({
       }
       displayMessage('Simulating smart contract execution...', '#1F2937', '#F3F4F6')
 
+      const StellarSdk = await loadStellarSdk()
       const contractArgs = [
         StellarSdk.nativeToScVal(userPublicKey, { type: 'address' }),
         StellarSdk.nativeToScVal(recipientAddress, { type: 'address' }),
