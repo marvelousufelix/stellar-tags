@@ -148,7 +148,7 @@ function App() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [balanceError, setBalanceError] = useState('')
 
-  const loadBalance = async () => {
+  const loadBalance = useCallback(async () => {
     if (!userPublicKey) {
       setBalance(null)
       setBalanceError('')
@@ -173,11 +173,12 @@ function App() {
     } finally {
       setIsRefreshing(false)
     }
-  }
+  }, [userPublicKey])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadBalance()
-  }, [userPublicKey])
+  }, [loadBalance])
 
   useEffect(() => {
     const syncView = () => {
@@ -327,7 +328,6 @@ function App() {
 
 function Dashboard({
   userPublicKey,
-  setUserPublicKey,
   onConnectWallet,
   onDisconnectWallet,
   balance,
@@ -384,6 +384,7 @@ function Dashboard({
 
   useEffect(() => {
     if (!userPublicKey) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setReceiveAddress('')
       setReceiveTag('')
       displayReceiveMessage('Connect your wallet to reveal your receive details.', '#1F2937', '#F3F4F6')
@@ -498,7 +499,7 @@ function Dashboard({
            throw new Error(preparedTransaction.error.message || 'Simulation rejected by network.')
          }
       } catch (err) {
-         throw new Error(`Simulation failed: ${err.message}`)
+         throw new Error(`Simulation failed: ${err.message}`, { cause: err })
       }
 
       // --- PHASE 4: WALLET SIGNATURE ---
@@ -511,7 +512,7 @@ function Dashboard({
         })
         if (signedXdrResponse.error) throw new Error(signedXdrResponse.error)
       } catch (err) {
-        throw new Error(`Wallet signature failed: ${err.message}`)
+        throw new Error(`Wallet signature failed: ${err.message}`, { cause: err })
       }
 
       // --- PHASE 5: BLOCKCHAIN SUBMISSION ---
@@ -545,7 +546,7 @@ function Dashboard({
           throw new Error(`Blockchain rejected transaction: ${status || 'Unknown'}`)
         }
       } catch (err) {
-        throw new Error(`Submission failed: ${err.message}`)
+        throw new Error(`Submission failed: ${err.message}`, { cause: err })
       }
 
     } catch (error) {
@@ -564,7 +565,7 @@ function Dashboard({
     try {
       await navigator.clipboard.writeText(value)
       displayReceiveMessage(`${label} copied to clipboard.`, '#059669', '#D1FAE5')
-    } catch (error) {
+    } catch {
       displayReceiveMessage('Copy failed. Please copy manually.', '#DC2626', '#FEE2E2')
     }
   }
@@ -782,6 +783,14 @@ function Dashboard({
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+            {receiveStatus.text && (
+              <div
+                id="receive-status-box"
+                style={{ color: receiveStatus.color, backgroundColor: receiveStatus.bgColor }}
+              >
+                {receiveStatus.text}
               </div>
             )}
             {status.text && (
@@ -1507,6 +1516,7 @@ function HistoryPage({
 
   useEffect(() => {
     const controller = new AbortController()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadHistory(controller.signal)
     return () => controller.abort()
   }, [loadHistory, refreshIndex, userPublicKey])
@@ -1822,7 +1832,7 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
         if (response.ok && data?.username) {
           onRegistered()
         }
-      } catch (error) {
+      } catch {
         // Ignore lookup errors in registration view.
       }
     }
@@ -1852,7 +1862,7 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
 
       setUserPublicKey(response.address)
       setStatusMessage('Wallet connected. Pick your username.', 'success')
-    } catch (error) {
+    } catch {
       setStatusMessage('Unable to connect to Freighter.', 'error')
     } finally {
       setIsConnecting(false)
