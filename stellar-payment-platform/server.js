@@ -4,11 +4,40 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
+const dotenv = require('dotenv');
+
+dotenv.config();
+
 const genericPool = require('generic-pool');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+//Ensure to add the value for STELLAR_TAG_DOMAIN in the env file
+const STELLAR_TAG_DOMAIN = process.env.STELLAR_TAG_DOMAIN;
 
+
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://stellar-tags.vercel.app',
+  STELLAR_TAG_DOMAIN
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+app.use(express.json());
 
 app.use(cors());
 // #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
@@ -298,6 +327,17 @@ app.use((err, _req, res, _next) => {
 });
 
 if (require.main === module) {
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server successfully initialized on port ${PORT}`);
+  });
+
+  // This catches any weird cloud port errors and prevents a hard crash
+  server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is in use, forcing shutdown so Railway can restart cleanly.`);
+      process.exit(1);
+    }
+  });
     const server = app.listen(PORT, '0.0.0.0', () => {
         console.log(`Server successfully initialized on port ${PORT}`);
     });
