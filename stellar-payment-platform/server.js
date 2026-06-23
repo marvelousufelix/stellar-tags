@@ -41,11 +41,13 @@ db.serialize(() => {
   );
 });
 
-app.get('/federation', (req, res) => {
+app.get('/federation', (req, res, next) => {
   const nameTag = normalizeNameTag(req.query.q);
 
   if (!nameTag) {
-    return res.status(400).json({ detail: "Missing 'q' parameter" });
+    const error = new Error("Missing 'q' parameter");
+    error.statusCode = 400;
+    return next(error);
   }
 
   db.get(
@@ -53,12 +55,16 @@ app.get('/federation', (req, res) => {
     [nameTag],
     (error, row) => {
       if (error) {
-        return res.status(500).json({ detail: 'Database lookup failed' });
+        const dbError = new Error('Database lookup failed');
+        dbError.statusCode = 500;
+        return next(dbError);
       }
 
       const address = row?.address || USER_DATABASE[nameTag];
       if (!address) {
-        return res.status(404).json({ detail: 'Name tag not found' });
+        const notFoundError = new Error('Name tag not found');
+        notFoundError.statusCode = 404;
+        return next(notFoundError);
       }
 
       return res.json({
@@ -71,12 +77,14 @@ app.get('/federation', (req, res) => {
   );
 });
 
-app.post('/register', (req, res) => {
+app.post('/register', (req, res, next) => {
   const username = normalizeNameTag(req.body.username);
   const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
 
   if (!username || !address) {
-    return res.status(400).json({ detail: 'username and address are required' });
+    const error = new Error('username and address are required');
+    error.statusCode = 400;
+    return next(error);
   }
 
   db.get(
@@ -84,11 +92,15 @@ app.post('/register', (req, res) => {
     [address],
     (lookupError, row) => {
       if (lookupError) {
-        return res.status(500).json({ detail: 'Database lookup failed' });
+        const dbError = new Error('Database lookup failed');
+        dbError.statusCode = 500;
+        return next(dbError);
       }
 
       if (row) {
-        return res.status(409).json({ detail: 'Address already registered' });
+        const conflictError = new Error('Address already registered');
+        conflictError.statusCode = 409;
+        return next(conflictError);
       }
 
       db.run(
@@ -97,10 +109,14 @@ app.post('/register', (req, res) => {
         (error) => {
           if (error) {
             if (error.message && error.message.includes('UNIQUE')) {
-              return res.status(409).json({ detail: 'Username already registered' });
+              const conflictError = new Error('Username already registered');
+              conflictError.statusCode = 409;
+              return next(conflictError);
             }
 
-            return res.status(500).json({ detail: 'Failed to save registration' });
+            const dbError = new Error('Failed to save registration');
+            dbError.statusCode = 500;
+            return next(dbError);
           }
 
           return res.json({ ok: true, username, address });
@@ -110,11 +126,13 @@ app.post('/register', (req, res) => {
   );
 });
 
-app.get('/lookup', (req, res) => {
+app.get('/lookup', (req, res, next) => {
   const address = typeof req.query.address === 'string' ? req.query.address.trim() : '';
 
   if (!address) {
-    return res.status(400).json({ detail: "Missing 'address' parameter" });
+    const error = new Error("Missing 'address' parameter");
+    error.statusCode = 400;
+    return next(error);
   }
 
   db.get(
@@ -122,11 +140,15 @@ app.get('/lookup', (req, res) => {
     [address],
     (error, row) => {
       if (error) {
-        return res.status(500).json({ detail: 'Database lookup failed' });
+        const dbError = new Error('Database lookup failed');
+        dbError.statusCode = 500;
+        return next(dbError);
       }
 
       if (!row) {
-        return res.status(404).json({ detail: 'Username not found for this address' });
+        const notFoundError = new Error('Username not found for this address');
+        notFoundError.statusCode = 404;
+        return next(notFoundError);
       }
 
       return res.json({ username: row.username, address });
@@ -136,6 +158,18 @@ app.get('/lookup', (req, res) => {
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  const statusCode = err.statusCode || 500;
+  const errorMessage = err.message || 'Internal server error';
+  
+  return res.status(statusCode).json({
+    success: false,
+    error: errorMessage,
+    statusCode: statusCode
+  });
 });
 
 if (require.main === module) {
