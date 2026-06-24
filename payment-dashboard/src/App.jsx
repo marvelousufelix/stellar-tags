@@ -4,6 +4,7 @@ import { useLatencyTracker } from './useLatencyTracker'
 import LatencyGauge from './LatencyGauge'
 import { useDebounce } from './useDebounce'
 import ScrollToTop from './ScrollToTop'
+import LoadingSpinner from './components/LoadingSpinner'
 
 
 const CONTRACT_ID = 'CDNQ7OMHIFOLZHOKWQLOGDW7CF3DRMKXJC6OULNGNBWF4O4NO2NEIGER'
@@ -497,7 +498,7 @@ function Dashboard({
       displayReceiveMessage('Loading your receive details...', '#1F2937', '#F3F4F6')
 
       try {
-        const response = await fetch(`${API_BASE}/lookup?address=${encodeURIComponent(userPublicKey)}`)
+        const response = await fetch(`${API_BASE}/api/v1/lookup?address=${encodeURIComponent(userPublicKey)}`)
         const rawBody = await response.text()
         const data = rawBody ? JSON.parse(rawBody) : null
 
@@ -548,7 +549,7 @@ function Dashboard({
         }
 
         if (resolved.tag) {
-          const response = await fetch(`${API_BASE}/federation?q=${encodeURIComponent(resolved.tag)}&type=name`)
+          const response = await fetch(`${API_BASE}/api/v1/federation?q=${encodeURIComponent(resolved.tag)}&type=name`)
           const data = response.ok ? await response.json() : null
           if (!data?.account_id) {
             return
@@ -591,7 +592,7 @@ function Dashboard({
       
       let recipientAddress = resolved.address
       if (!recipientAddress && resolved.tag) {
-        const response = await fetch(`${API_BASE}/federation?q=${encodeURIComponent(resolved.tag)}&type=name`)
+        const response = await fetch(`${API_BASE}/api/v1/federation?q=${encodeURIComponent(resolved.tag)}&type=name`)
         const data = response.ok ? await response.json() : null
         if (!data?.account_id) throw new Error('Recipient address could not be resolved from backend.')
         recipientAddress = data.account_id
@@ -1953,7 +1954,7 @@ function MobileNav({
   )
 }
 
-const USERNAME_REGEX = /^[a-zA-Z0-9_\-]+$/
+const USERNAME_REGEX = /^[a-zA-Z0-9_-]+$/
 
 function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistered }) {
   const [username, setUsername] = useState('')
@@ -1980,7 +1981,7 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
 
     const checkExisting = async () => {
       try {
-        const response = await fetch(`${API_BASE}/lookup?address=${encodeURIComponent(userPublicKey)}`)
+        const response = await fetch(`${API_BASE}/api/v1/lookup?address=${encodeURIComponent(userPublicKey)}`)
         const rawBody = await response.text()
         const data = rawBody ? JSON.parse(rawBody) : null
 
@@ -2061,7 +2062,7 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
 
     setStatusMessage('Submitting your registration...', 'neutral')
 
-    fetch(`${API_BASE}/register`, {
+    fetch(`${API_BASE}/api/v1/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

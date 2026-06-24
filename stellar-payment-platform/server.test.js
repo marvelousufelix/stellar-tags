@@ -277,19 +277,19 @@ describe('GET /lookup — pagination and search', () => {
   });
 
   test('returns 400 when neither address nor search is provided', async () => {
-    const res = await request(app).get('/lookup');
+    const res = await request(app).get('/api/v1/lookup');
     expect(res.status).toBe(400);
   });
 
   test('exact address lookup returns single record (backward compat)', async () => {
-    const res = await request(app).get(`/lookup?address=${VALID_ADDRESS}`);
+    const res = await request(app).get(`/api/v1/lookup?address=${VALID_ADDRESS}`);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ username: 'alice*localhost', address: VALID_ADDRESS });
     expect(res.body).not.toHaveProperty('data');
   });
 
   test('search mode returns paginated metadata block', async () => {
-    const res = await request(app).get('/lookup?search=alice&page=1&limit=10');
+    const res = await request(app).get('/api/v1/lookup?search=alice&page=1&limit=10');
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('data');
     expect(res.body).toHaveProperty('totalCount');
@@ -298,7 +298,7 @@ describe('GET /lookup — pagination and search', () => {
   });
 
   test('search mode defaults page to 1 and limit to 10 when omitted', async () => {
-    const res = await request(app).get('/lookup?search=alice');
+    const res = await request(app).get('/api/v1/lookup?search=alice');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ currentPage: 1 });
   });
@@ -365,20 +365,20 @@ describe('GET /users — pagination and search', () => {
   });
 
   test('returns paginated metadata block with default page and limit', async () => {
-    const res = await request(app).get('/users');
+    const res = await request(app).get('/api/v1/users');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ totalCount: 25, currentPage: 1 });
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 
   test('respects explicit page and limit query params', async () => {
-    const res = await request(app).get('/users?page=3&limit=5');
+    const res = await request(app).get('/api/v1/users?page=3&limit=5');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ currentPage: 3 });
   });
 
   test('accepts search query param without error', async () => {
-    const res = await request(app).get('/users?search=alice');
+    const res = await request(app).get('/api/v1/users?search=alice');
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('data');
   });

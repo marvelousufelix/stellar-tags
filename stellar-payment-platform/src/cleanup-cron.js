@@ -52,7 +52,7 @@ function runCleanup(db) {
       await runAsync(
         `ALTER TABLE username_registry ADD COLUMN flagged_at TEXT`,
       );
-    } catch (_err) {
+    } catch {
       // Ignore errors – the column likely already exists.
     }
 
