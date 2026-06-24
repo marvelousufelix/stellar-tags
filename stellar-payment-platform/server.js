@@ -44,6 +44,12 @@ app.use(cors(corsOptions));
 app.use(express.json());
 // #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
 app.use(express.json({ limit: '10kb' }));
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Malformed JSON payload' });
+  }
+  next(err);
+});
 
 const isPrimitive = (v) => v === null || v === undefined || typeof v !== 'object';
 
