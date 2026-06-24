@@ -198,6 +198,17 @@ const etagCache = (req, res, next) => {
   next();
 };
 
+const maintenanceMode = (req, res, next) => {
+  if (process.env.MAINTENANCE_MODE !== 'true') return next();
+  if (req.path === '/health') return next();
+  res
+    .status(503)
+    .set('Retry-After', '3600')
+    .json({ detail: 'Service temporarily unavailable. Please try again later.' });
+};
+
+app.use(maintenanceMode);
+
 app.get('/federation', etagCache, async (req, res) => {
   const nameTag = normalizeNameTag(req.query.q);
 
@@ -350,4 +361,4 @@ if (require.main === module) {
 }
 
 // Export for testing and for the Horizon listener
-module.exports = { app, poolGet, poolAll };
+module.exports = { app, poolGet, poolAll, maintenanceMode };
