@@ -746,23 +746,37 @@ function Dashboard({
 
                 <label>Amount (XLM)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
+                  onChange={(event) => {
+                    const raw = event.target.value.replace(/[^0-9.]/g, '')
+                    const parts = raw.split('.')
+                    const cleaned = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw
+                    setAmount(cleaned)
+                  }}
                   placeholder="0.00"
-                  min="0.01"
-                  step="0.01"
                   disabled={!userPublicKey || isProcessing}
                 />
 
-                <button
-                  type="button"
-                  className="accent-btn"
-                  onClick={handleLookup}
-                  disabled={!userPublicKey || isProcessing}
-                >
-                  {isProcessing ? 'Processing...' : 'Transfer'}
-                </button>
+                <div className="form-actions">
+                  <button
+                    type="button"
+                    className="accent-btn"
+                    onClick={handleLookup}
+                    disabled={!userPublicKey || isProcessing}
+                  >
+                    {isProcessing ? 'Processing...' : 'Transfer'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => { setNameTag(''); setAmount(''); }}
+                    disabled={isProcessing}
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
             )}
             {activeBalancePanel === 'receive' && (
@@ -808,6 +822,14 @@ function Dashboard({
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+            {receiveStatus.text && (
+              <div
+                id="receive-status-box"
+                style={{ color: receiveStatus.color, backgroundColor: receiveStatus.bgColor }}
+              >
+                {receiveStatus.text}
               </div>
             )}
             {status.text && (
@@ -1993,6 +2015,9 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
           </label>
           <div className="helper-row">
             <span>3-18 characters, letters and numbers recommended.</span>
+            <span className={`char-counter${username.length >= 30 ? ' char-counter--limit' : ''}`}>
+              {username.length} / 30
+            </span>
           </div>
           <button className="primary-button" type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Reserving...' : 'Reserve username'}

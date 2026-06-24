@@ -280,7 +280,9 @@ app.post('/register', async (req, res, next) => {
       conflictError.statusCode = 409;
       return next(conflictError);
     }
-    return res.status(500).json({ detail: 'Failed to save registration' });
+    const registrationError = new Error('Failed to save registration');
+    registrationError.statusCode = 500;
+    return next(registrationError);
   }
 });
 
@@ -357,13 +359,50 @@ app.use((err, req, res, next) => {
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const errorMessage = err.message || 'Internal server error';
-  
+
+  if (statusCode === 500) {
+    const errorId = crypto.randomUUID();
+    console.error(`[Error ID: ${errorId}]`, err);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      reference_id: errorId
+    });
+  }
+
   return res.status(statusCode).json({
     success: false,
     error: errorMessage,
     statusCode: statusCode
   });
 });
+
+const SHUTDOWN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_TIMEOUT_MS, 10) || 10_000;
+
+let isShuttingDown = false;
+
+const gracefulShutdown = (server, pool, signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+
+  const timer = setTimeout(() => {
+    console.error(`Graceful shutdown timed out after ${SHUTDOWN_TIMEOUT_MS / 1000}s, forcing exit.`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+
+  server.close(async () => {
+    clearTimeout(timer);
+    try {
+      await pool.drain();
+      await pool.clear();
+    } catch (err) {
+      console.error('Error draining DB pool during shutdown:', err);
+    }
+    process.exit(0);
+  });
+};
 
 if (require.main === module) {
   const server = app.listen(PORT, '0.0.0.0', () => {
@@ -377,14 +416,8 @@ if (require.main === module) {
     }
   });
 
-  const shutdown = async () => {
-    console.log('\nShutting down gracefully...');
-    await dbPool.drain();
-    await dbPool.clear();
-    server.close(() => process.exit(0));
-  };
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', (sig) => gracefulShutdown(server, dbPool, sig));
+  process.on('SIGINT',  (sig) => gracefulShutdown(server, dbPool, sig));
 }
 
-module.exports = { app, poolGet, poolAll, rejectNestedObjects };
+module.exports = { app, poolGet, poolAll, gracefulShutdown, rejectNestedObjects };
