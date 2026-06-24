@@ -144,7 +144,8 @@ const poolAll = (sql, params) =>
       `CREATE TABLE IF NOT EXISTS username_registry (
         username TEXT PRIMARY KEY,
         address TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        is_banned INTEGER DEFAULT 0
       )`,
       [],
     );
@@ -179,7 +180,8 @@ db.serialize(() => {
     `CREATE TABLE IF NOT EXISTS username_registry (
       username TEXT PRIMARY KEY,
       address TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      is_banned INTEGER DEFAULT 0
     )`,
   );
 });
@@ -226,7 +228,7 @@ app.get('/federation', etagCache, async (req, res, next) => {
 
   try {
     const row = await poolGet(
-      'SELECT address FROM username_registry WHERE username = ?',
+      'SELECT address FROM username_registry WHERE username = ? AND is_banned = 0',
       [nameTag],
     );
 
