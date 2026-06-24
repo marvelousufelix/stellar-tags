@@ -460,7 +460,7 @@ function Dashboard({
   const [activeBalancePanel, setActiveBalancePanel] = useState('')
   const [receiveAddress, setReceiveAddress] = useState('')
   const [receiveTag, setReceiveTag] = useState('')
-  const [, setReceiveStatus] = useState({
+  const [receiveStatus, setReceiveStatus] = useState({
     text: '',
     color: '#1F2937',
     bgColor: '#F3F4F6',
@@ -518,7 +518,7 @@ function Dashboard({
         }
 
         throw new Error((data && data.detail) || `Backend error (${response.status}).`)
-      } catch (error) {
+      } catch (error){
         setReceiveAddress(userPublicKey)
         setReceiveTag('')
         displayReceiveMessage(error.message || 'Unable to load receive details.', '#DC2626', '#FEE2E2')
@@ -554,7 +554,7 @@ function Dashboard({
             return
           }
         }
-      } catch (error) {
+      } catch  {
         // Silently fail on search errors during typing
       }
     }
