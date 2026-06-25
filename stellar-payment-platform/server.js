@@ -260,7 +260,7 @@ const etagCache = (req, res, next) => {
 // ---------------------------------------------------------------------------
 // #81 — SEP-0002: Handle type=id Federation Queries
 // ---------------------------------------------------------------------------
-app.get('/federation', etagCache, async (req, res, next) => {
+app.get(['/federation', '/api/v1/federation'], etagCache, async (req, res, next) => {
   // Extract q (query) and type parameters from the request
   const { q, type } = req.query;
   const queryValue = typeof q === 'string' ? q.trim() : '';
@@ -340,7 +340,7 @@ app.get('/federation', etagCache, async (req, res, next) => {
 
 const { StrKey } = require('@stellar/stellar-sdk');
 
-app.post('/register', async (req, res, next) => {
+app.post(['/register', '/api/v1/register'], async (req, res, next) => {
   const username = normalizeNameTag(req.body.username);
   const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
   const signature = typeof req.body.signature === 'string' ? req.body.signature.trim() : '';
@@ -388,7 +388,7 @@ app.post('/register', async (req, res, next) => {
   }
 });
 
-app.get('/lookup', async (req, res, next) => {
+app.get(['/lookup', '/api/v1/lookup'], async (req, res, next) => {
   const address = typeof req.query.address === 'string' ? req.query.address.trim() : '';
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
@@ -620,4 +620,4 @@ if (require.main === module) {
   process.on('SIGINT',  (sig) => gracefulShutdown(server, dbPool, sig));
 }
 
-module.exports = { app, poolGet, poolAll, gracefulShutdown, rejectNestedObjects };
+module.exports = { app, poolGet, poolAll, poolRun, dbPool, db, gracefulShutdown, rejectNestedObjects };
