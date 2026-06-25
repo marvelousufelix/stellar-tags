@@ -3,11 +3,17 @@ const cors = require('cors');
 const crypto = require('crypto');
 require('dotenv').config();
 
+const { Horizon, StrKey } = require('@stellar/stellar-sdk');
+const PDFDocument = require('pdfkit');
 const { Prisma } = require('@prisma/client');
 const { prisma } = require('./prismaClient');
 const { scheduleCleanupJob } = require('./src/cleanup-cron');
 
+const HORIZON_BASE = 'https://horizon-testnet.stellar.org';
+const TX_HASH_RE = /^[a-fA-F0-9]{64}$/;
+
 const app = express();
+app.set('query parser', 'simple');
 const PORT = process.env.PORT || 5000;
 // Ensure to add the value for STELLAR_TAG_DOMAIN in the env file
 const STELLAR_TAG_DOMAIN = process.env.STELLAR_TAG_DOMAIN;
@@ -34,6 +40,12 @@ const corsOptions = {
 app.use(cors(corsOptions));
 // #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
 app.use(express.json({ limit: '10kb' }));
+app.use((err, _req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Malformed JSON payload' });
+  }
+  next(err);
+});
 
 // ---------------------------------------------------------------------------
 // Reject nested objects/arrays in query and body params (NoSQL-style injection
@@ -115,33 +127,75 @@ const etagCache = (req, res, next) => {
   next();
 };
 
+// ---------------------------------------------------------------------------
+// #81 — SEP-0002: Handle type=id Federation Queries
+// ---------------------------------------------------------------------------
 app.get('/federation', etagCache, async (req, res, next) => {
-  const nameTag = normalizeNameTag(req.query.q);
+  // Extract q (query) and type parameters from the request
+  const { q, type } = req.query;
+  const queryValue = typeof q === 'string' ? q.trim() : '';
 
-  if (!nameTag) {
+  // Validate that q parameter exists
+  if (!queryValue) {
     const error = new Error("Missing 'q' parameter");
     error.statusCode = 400;
     return next(error);
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { username: nameTag },
-    });
+    // Branch logic based on type parameter (SEP-0002 compliance)
+    if (type === 'id') {
+      // Reverse lookup: search by Stellar address (case-insensitive)
+      const row = await prisma.user.findFirst({
+        where: { address: { equals: queryValue, mode: 'insensitive' } },
+        select: { username: true, address: true },
+      });
 
-    const address = user?.address || USER_DATABASE[nameTag];
-    if (!address) {
-      const notFoundError = new Error('Name tag not found');
-      notFoundError.statusCode = 404;
-      return next(notFoundError);
+      if (!row) {
+        const notFoundError = new Error('Address not found');
+        notFoundError.statusCode = 404;
+        return next(notFoundError);
+      }
+
+      // Return federation response for address lookup
+      return res.json({
+        stellar_address: `${row.username}*${process.env.DOMAIN || 'localhost'}`,
+        account_id: row.address,
+        memo_type: 'text',
+        memo: 'PlatformPayment',
+      });
+    } else if (type === 'name' || !type) {
+      // Default: lookup by username (backward compatible)
+      // Normalize the name tag (e.g., "alice*localhost") and lowercase it.
+      const nameTag = normalizeNameTag(queryValue);
+      const queryName = nameTag.toLowerCase();
+
+      const row = await prisma.user.findUnique({
+        where: { username: queryName },
+        select: { address: true },
+      });
+
+      // Fallback to hardcoded USER_DATABASE for backward compatibility
+      const address = row?.address || USER_DATABASE[queryName];
+
+      if (!address) {
+        const notFoundError = new Error('Name tag not found');
+        notFoundError.statusCode = 404;
+        return next(notFoundError);
+      }
+
+      return res.json({
+        stellar_address: address,
+        account_id: address,
+        memo_type: 'text',
+        memo: 'PlatformPayment',
+      });
+    } else {
+      // Unsupported type parameter
+      return res.status(400).json({
+        error: "Unsupported query type. Supported types: 'id', 'name'",
+      });
     }
-
-    return res.json({
-      stellar_address: address,
-      account_id: address,
-      memo_type: 'text',
-      memo: 'PlatformPayment',
-    });
   } catch {
     const dbError = new Error('Database lookup failed');
     dbError.statusCode = 500;
@@ -157,15 +211,14 @@ app.post('/register', async (req, res, next) => {
     return res.status(400).json({ error: 'Missing required fields: username and address are both required.' });
   }
 
-  // Lazily required so loading this module (e.g. in unit tests) does not pull
-  // in the Stellar SDK and its ESM dependencies. Node caches the require.
-  const { StrKey } = require('@stellar/stellar-sdk');
-
   if (!StrKey.isValidEd25519PublicKey(address)) {
     const error = new Error('Invalid Stellar Public Key format.');
     error.statusCode = 400;
     return next(error);
   }
+
+  // Convert to lowercase for case-insensitive storage
+  const normalizedUsername = username.toLowerCase();
 
   try {
     const existing = await prisma.user.findUnique({
@@ -179,10 +232,15 @@ app.post('/register', async (req, res, next) => {
     }
 
     await prisma.user.create({
-      data: { username, address },
+      data: { username: normalizedUsername, address },
     });
 
-    return res.json({ ok: true, username, address });
+    return res.status(201).json({
+      ok: true,
+      username: normalizedUsername,
+      address,
+      federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
+    });
   } catch (error) {
     // P2002 — unique constraint violation (username or address already taken)
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -194,7 +252,6 @@ app.post('/register', async (req, res, next) => {
       conflictError.statusCode = 409;
       return next(conflictError);
     }
-
     const registrationError = new Error('Failed to save registration');
     registrationError.statusCode = 500;
     return next(registrationError);
@@ -203,25 +260,67 @@ app.post('/register', async (req, res, next) => {
 
 app.get('/lookup', async (req, res, next) => {
   const address = typeof req.query.address === 'string' ? req.query.address.trim() : '';
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
-  if (!address) {
-    const error = new Error("Missing 'address' parameter");
+  if (!address && !search) {
+    const error = new Error("Missing required parameter: provide 'address' for exact lookup or 'search' for paginated search");
     error.statusCode = 400;
     return next(error);
   }
 
-  try {
-    const user = await prisma.user.findUnique({
-      where: { address },
-    });
+  // Exact lookup by address — original behaviour, returns a single record
+  if (address) {
+    try {
+      const row = await prisma.user.findUnique({
+        where: { address },
+        select: { username: true },
+      });
 
-    if (!user) {
-      const notFoundError = new Error('Username not found for this address');
-      notFoundError.statusCode = 404;
-      return next(notFoundError);
+      if (!row) {
+        const notFoundError = new Error('Username not found for this address');
+        notFoundError.statusCode = 404;
+        return next(notFoundError);
+      }
+
+      return res.json({ username: row.username, address });
+    } catch {
+      const dbError = new Error('Database lookup failed');
+      dbError.statusCode = 500;
+      return next(dbError);
     }
+  }
 
-    return res.json({ username: user.username, address });
+  // Paginated search by partial username or address
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+  const skip = (page - 1) * limit;
+
+  const where = {
+    OR: [
+      { username: { contains: search, mode: 'insensitive' } },
+      { address: { contains: search, mode: 'insensitive' } },
+    ],
+  };
+
+  try {
+    const [totalCount, rows] = await prisma.$transaction([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+    const data = rows.map((user) => ({
+      username: user.username,
+      address: user.address,
+      created_at: user.createdAt.toISOString(),
+    }));
+
+    return res.json({ data, totalCount, totalPages, currentPage: page });
   } catch {
     const dbError = new Error('Database lookup failed');
     dbError.statusCode = 500;
@@ -245,7 +344,7 @@ app.get('/users', async (req, res, next) => {
     : {};
 
   try {
-    const [totalCount, users] = await prisma.$transaction([
+    const [totalCount, rows] = await prisma.$transaction([
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
@@ -256,13 +355,13 @@ app.get('/users', async (req, res, next) => {
     ]);
 
     const totalPages = Math.ceil(totalCount / limit);
-    const data = users.map((user) => ({
+    const data = rows.map((user) => ({
       username: user.username,
       address: user.address,
       created_at: user.createdAt.toISOString(),
     }));
 
-    return res.json({ data, totalCount, totalPages, currentPage: page });
+    res.json({ data, totalCount, totalPages, currentPage: page });
   } catch {
     const dbError = new Error('Database error');
     dbError.statusCode = 500;
@@ -270,8 +369,76 @@ app.get('/users', async (req, res, next) => {
   }
 });
 
+app.get('/.well-known/stellar.toml', cors({ origin: '*' }), (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  res.send('FEDERATION_SERVER="https://stellar-tags-production.up.railway.app/federation"\n');
+});
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/api/v1/receipts/:txHash', async (req, res) => {
+  const { txHash } = req.params;
+
+  if (!TX_HASH_RE.test(txHash)) {
+    return res.status(400).json({ detail: 'Invalid transaction hash format' });
+  }
+
+  let tx;
+  let paymentOps;
+
+  try {
+    const server = new Horizon.Server(HORIZON_BASE);
+    [tx, paymentOps] = await Promise.all([
+      server.transactions().transaction(txHash).call(),
+      server.payments().forTransaction(txHash).call(),
+    ]);
+  } catch (err) {
+    if (err && err.response && err.response.status === 404) {
+      return res.status(404).json({ detail: 'Transaction not found' });
+    }
+    return res.status(500).json({ detail: 'Failed to fetch transaction' });
+  }
+
+  const timestamp = tx.created_at
+    ? new Date(tx.created_at).toUTCString()
+    : 'Unknown';
+
+  const nativeOp = (paymentOps.records || []).find(
+    (op) => op.asset_type === 'native',
+  );
+
+  const sender = nativeOp ? nativeOp.from : tx.source_account;
+  const receiver = nativeOp ? nativeOp.to : 'Contract invocation';
+  const amount = nativeOp ? `${nativeOp.amount} XLM` : 'See Stellar Explorer';
+
+  const safeHash = txHash.replace(/[^a-fA-F0-9]/g, '');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="receipt-${safeHash}.pdf"`,
+  );
+
+  const doc = new PDFDocument({ margin: 50 });
+  doc.pipe(res);
+
+  doc
+    .fontSize(20)
+    .text('Stellar Transaction Receipt', { align: 'center' })
+    .moveDown(1.5);
+
+  doc.fontSize(11).text(`Transaction Hash: ${txHash}`).moveDown(0.5);
+  doc.text(`Timestamp:        ${timestamp}`).moveDown(0.5);
+  doc.text(`Sender:           ${sender}`).moveDown(0.5);
+  doc.text(`Receiver:         ${receiver}`).moveDown(0.5);
+  doc.text(`Amount:           ${amount}`).moveDown(1.5);
+
+  doc.fontSize(9).fillColor('#888888').text('Generated by Stellar Pay — Testnet', {
+    align: 'center',
+  });
+
+  doc.end();
 });
 
 // #49 — Payload size limit violations are normalised into the global handler.
@@ -341,7 +508,6 @@ if (require.main === module) {
     console.log(`Server successfully initialized on port ${PORT}`);
   });
 
-  // This catches any weird cloud port errors and prevents a hard crash
   server.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
       console.error(`Port ${PORT} is in use, forcing shutdown so Railway can restart cleanly.`);
@@ -360,5 +526,4 @@ if (require.main === module) {
   process.on('SIGINT', (sig) => gracefulShutdown(server, prismaPool, sig));
 }
 
-// Export for testing and for the Horizon listener
 module.exports = { app, prisma, gracefulShutdown, rejectNestedObjects };

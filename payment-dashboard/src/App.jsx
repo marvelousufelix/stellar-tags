@@ -1,7 +1,10 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import freighterApi from '@stellar/freighter-api'
+import { useLatencyTracker } from './useLatencyTracker'
+import LatencyGauge from './LatencyGauge'
 import { useDebounce } from './useDebounce'
-import LoadingSpinner from './components/LoadingSpinner'
+import ScrollToTop from './ScrollToTop'
+
 
 const CONTRACT_ID = 'CDNQ7OMHIFOLZHOKWQLOGDW7CF3DRMKXJC6OULNGNBWF4O4NO2NEIGER'
 const TREASURY_ADDRESS = 'GAAFWEZKDYPXLTQGKQ3F23TXWYQUDAYTDW7P7VUQSVJFW2GWC4Y6LWST'
@@ -124,6 +127,20 @@ function App() {
   const [activeView, setActiveView] = useState('dashboard')
   const [userPublicKey, setUserPublicKey] = useState('')
   const [registrationState, setRegistrationState] = useState('unknown')
+  const [isOffline, setIsOffline] = useState(!navigator.onLine)
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false)
+    const handleOffline = () => setIsOffline(true)
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   const handleConnectWallet = async () => {
     const status = await freighterApi.isConnected()
@@ -249,78 +266,163 @@ function App() {
 
   if (activeView === 'register' && registrationState === 'new') {
     return (
-      <RegistrationPage
-        userPublicKey={userPublicKey}
-        setUserPublicKey={setUserPublicKey}
-        onBack={() => handleNavigate('dashboard')}
-        onRegistered={() => handleRegistrationStateChange('existing')}
-      />
+      <>
+        {isOffline && (
+          <div style={{
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '12px 16px',
+            textAlign: 'center',
+            fontWeight: '500',
+            fontSize: '14px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1000,
+          }}>
+            ⚠️ You are currently offline. Transactions will fail.
+          </div>
+        )}
+        <RegistrationPage
+          userPublicKey={userPublicKey}
+          setUserPublicKey={setUserPublicKey}
+          onBack={() => handleNavigate('dashboard')}
+          onRegistered={() => handleRegistrationStateChange('existing')}
+        />
+      </>
     )
   }
 
   if (activeView === 'help') {
     return (
-      <HelpPage
-        userPublicKey={userPublicKey}
-        onConnectWallet={handleConnectWallet}
-        onDisconnectWallet={handleDisconnectWallet}
-        onDashboardClick={() => handleNavigate('dashboard')}
-        onAnalyticsClick={() => handleNavigate('analytics')}
-        onHistoryClick={() => handleNavigate('history')}
-        onRegisterClick={() => handleNavigate('register')}
-        canRegister={registrationState === 'new'}
-      />
+      <>
+        {isOffline && (
+          <div style={{
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '12px 16px',
+            textAlign: 'center',
+            fontWeight: '500',
+            fontSize: '14px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1000,
+          }}>
+            ⚠️ You are currently offline. Transactions will fail.
+          </div>
+        )}
+        <HelpPage
+          userPublicKey={userPublicKey}
+          onConnectWallet={handleConnectWallet}
+          onDisconnectWallet={handleDisconnectWallet}
+          onDashboardClick={() => handleNavigate('dashboard')}
+          onAnalyticsClick={() => handleNavigate('analytics')}
+          onHistoryClick={() => handleNavigate('history')}
+          onRegisterClick={() => handleNavigate('register')}
+          canRegister={registrationState === 'new'}
+        />
+      </>
     )
   }
 
   if (activeView === 'analytics') {
     return (
-      <AnalyticsPage
-        userPublicKey={userPublicKey}
-        onConnectWallet={handleConnectWallet}
-        onDisconnectWallet={handleDisconnectWallet}
-        onDashboardClick={() => handleNavigate('dashboard')}
-        onHistoryClick={() => handleNavigate('history')}
-        onHelpClick={() => handleNavigate('help')}
-        onRegisterClick={() => handleNavigate('register')}
-        canRegister={registrationState === 'new'}
-      />
+      <>
+        {isOffline && (
+          <div style={{
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '12px 16px',
+            textAlign: 'center',
+            fontWeight: '500',
+            fontSize: '14px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1000,
+          }}>
+            ⚠️ You are currently offline. Transactions will fail.
+          </div>
+        )}
+        <AnalyticsPage
+          userPublicKey={userPublicKey}
+          onConnectWallet={handleConnectWallet}
+          onDisconnectWallet={handleDisconnectWallet}
+          onDashboardClick={() => handleNavigate('dashboard')}
+          onHistoryClick={() => handleNavigate('history')}
+          onHelpClick={() => handleNavigate('help')}
+          onRegisterClick={() => handleNavigate('register')}
+          canRegister={registrationState === 'new'}
+        />
+      </>
     )
   }
 
   if (activeView === 'history') {
     return (
-      <HistoryPage
-        userPublicKey={userPublicKey}
-        setUserPublicKey={setUserPublicKey}
-        onConnectWallet={handleConnectWallet}
-        onDisconnectWallet={handleDisconnectWallet}
-        onRefreshBalance={loadBalance}
-        onDashboardClick={() => handleNavigate('dashboard')}
-        onAnalyticsClick={() => handleNavigate('analytics')}
-        onHelpClick={() => handleNavigate('help')}
-        onRegisterClick={() => handleNavigate('register')}
-        canRegister={registrationState === 'new'}
-      />
+      <>
+        {isOffline && (
+          <div style={{
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '12px 16px',
+            textAlign: 'center',
+            fontWeight: '500',
+            fontSize: '14px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1000,
+          }}>
+            ⚠️ You are currently offline. Transactions will fail.
+          </div>
+        )}
+        <HistoryPage
+          userPublicKey={userPublicKey}
+          setUserPublicKey={setUserPublicKey}
+          onConnectWallet={handleConnectWallet}
+          onDisconnectWallet={handleDisconnectWallet}
+          onRefreshBalance={loadBalance}
+          onDashboardClick={() => handleNavigate('dashboard')}
+          onAnalyticsClick={() => handleNavigate('analytics')}
+          onHelpClick={() => handleNavigate('help')}
+          onRegisterClick={() => handleNavigate('register')}
+          canRegister={registrationState === 'new'}
+        />
+      </>
     )
   }
 
   return (
-    <Dashboard
-      userPublicKey={userPublicKey}
-      onConnectWallet={handleConnectWallet}
-      onDisconnectWallet={handleDisconnectWallet}
-      balance={balance}
-      isRefreshing={isRefreshing}
-      balanceError={balanceError}
-      onRefreshBalance={loadBalance}
-      onRegisterClick={() => handleNavigate('register')}
-      onAnalyticsClick={() => handleNavigate('analytics')}
-      onHistoryClick={() => handleNavigate('history')}
-      onHelpClick={() => handleNavigate('help')}
-      onRegistrationStateChange={handleRegistrationStateChange}
-      canRegister={registrationState === 'new'}
-    />
+    <>
+      {isOffline && (
+        <div style={{
+          backgroundColor: '#DC2626',
+          color: '#FFFFFF',
+          padding: '12px 16px',
+          textAlign: 'center',
+          fontWeight: '500',
+          fontSize: '14px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1000,
+        }}>
+          ⚠️ You are currently offline. Transactions will fail.
+        </div>
+      )}
+      <Dashboard
+        userPublicKey={userPublicKey}
+        onConnectWallet={handleConnectWallet}
+        onDisconnectWallet={handleDisconnectWallet}
+        balance={balance}
+        isRefreshing={isRefreshing}
+        balanceError={balanceError}
+        onRefreshBalance={loadBalance}
+        onRegisterClick={() => handleNavigate('register')}
+        onAnalyticsClick={() => handleNavigate('analytics')}
+        onHistoryClick={() => handleNavigate('history')}
+        onHelpClick={() => handleNavigate('help')}
+        onRegistrationStateChange={handleRegistrationStateChange}
+        canRegister={registrationState === 'new'}
+      />
+    </>
   )
 }
 
@@ -358,7 +460,7 @@ function Dashboard({
   const [activeBalancePanel, setActiveBalancePanel] = useState('')
   const [receiveAddress, setReceiveAddress] = useState('')
   const [receiveTag, setReceiveTag] = useState('')
-  const [, setReceiveStatus] = useState({
+  const [receiveStatus, setReceiveStatus] = useState({
     text: '',
     color: '#1F2937',
     bgColor: '#F3F4F6',
@@ -368,6 +470,9 @@ function Dashboard({
     color: '#1F2937',
     bgColor: '#F3F4F6',
   })
+
+  // Initialize latency tracker for real-time API monitoring
+  const latencyTracker = useLatencyTracker(API_BASE)
 
   const walletLabel = userPublicKey
     ? `Connected: ${userPublicKey.substring(0, 5)}...${userPublicKey.substring(51)}`
@@ -413,7 +518,7 @@ function Dashboard({
         }
 
         throw new Error((data && data.detail) || `Backend error (${response.status}).`)
-      } catch (error) {
+      } catch (error){
         setReceiveAddress(userPublicKey)
         setReceiveTag('')
         displayReceiveMessage(error.message || 'Unable to load receive details.', '#DC2626', '#FEE2E2')
@@ -449,7 +554,7 @@ function Dashboard({
             return
           }
         }
-      } catch (error) {
+      } catch  {
         // Silently fail on search errors during typing
       }
     }
@@ -616,7 +721,7 @@ function Dashboard({
           <h1>Stellar Pay</h1>
         </div>
         <div className="nav">
-          <button type="button" onClick={closeNav}>Dashboard</button>
+          <button type="button" aria-current="page" onClick={closeNav}>Dashboard</button>
           <button type="button" onClick={() => handleNav(onHistoryClick)}>History</button>
           <button type="button" onClick={() => handleNav(onAnalyticsClick)}>Analytics</button>
           <button type="button" onClick={() => handleNav(onHelpClick)}>Help</button>
@@ -660,6 +765,10 @@ function Dashboard({
           </div>
           <div className="topbar-actions">
             <span className="chip">Testnet</span>
+            <LatencyGauge 
+              latency={latencyTracker.latency}
+              status={latencyTracker.status}
+            />
             <div className="wallet-menu" ref={menuRef}>
               <button
                 type="button"
@@ -854,6 +963,7 @@ function Dashboard({
         onRegisterClick={() => handleNav(onRegisterClick)}
         canRegister={canRegister}
       />
+      <ScrollToTop />
     </div>
   )
 }
@@ -1019,6 +1129,7 @@ function HelpPage({
         onRegisterClick={() => handleNav(onRegisterClick)}
         canRegister={canRegister}
       />
+      <ScrollToTop />
     </div>
   )
 }
@@ -1391,6 +1502,7 @@ function AnalyticsPage({
         onRegisterClick={() => handleNav(onRegisterClick)}
         canRegister={canRegister}
       />
+      <ScrollToTop />
     </div>
   )
 }
@@ -1762,6 +1874,7 @@ function HistoryPage({
         onRegisterClick={() => handleNav(onRegisterClick)}
         canRegister={canRegister}
       />
+      <ScrollToTop />
     </div>
   )
 }
@@ -1840,8 +1953,11 @@ function MobileNav({
   )
 }
 
+const USERNAME_REGEX = /^[a-zA-Z0-9_\-]+$/
+
 function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistered }) {
   const [username, setUsername] = useState('')
+  const [usernameError, setUsernameError] = useState('')
   const [status, setStatus] = useState({
     text: 'Connect a wallet to begin your registration.',
     tone: 'neutral',
@@ -1908,7 +2024,7 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
     }
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
     const cleaned = username.trim()
     const normalizedUsername = normalizeNameTag(cleaned)
@@ -1923,7 +2039,26 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
       return
     }
 
+    if (!USERNAME_REGEX.test(cleaned)) {
+      setStatusMessage('Username may only contain letters, numbers, hyphens, and underscores.', 'error')
+      return
+    }
+
     setIsSubmitting(true)
+    setStatusMessage('Approve the signature request in Freighter...', 'neutral')
+
+    let signature
+    try {
+      const message = `register:${normalizedUsername}:${userPublicKey}`
+      const result = await freighterApi.signMessage(message, { address: userPublicKey })
+      if (result.error) throw new Error(result.error)
+      signature = result.signedMessage
+    } catch (err) {
+      setStatusMessage(err.message || 'Signature request cancelled.', 'error')
+      setIsSubmitting(false)
+      return
+    }
+
     setStatusMessage('Submitting your registration...', 'neutral')
 
     fetch(`${API_BASE}/register`, {
@@ -1934,6 +2069,7 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
       body: JSON.stringify({
         username: normalizedUsername,
         address: userPublicKey,
+        signature,
       }),
     })
       .then(async (response) => {
@@ -2011,8 +2147,23 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
               type="text"
               placeholder="stellarname"
               value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              onChange={(event) => {
+                const val = event.target.value
+                setUsername(val)
+                if (val && !USERNAME_REGEX.test(val)) {
+                  setUsernameError('Only letters, numbers, hyphens, and underscores are allowed.')
+                } else {
+                  setUsernameError('')
+                }
+              }}
+              aria-describedby={usernameError ? 'username-error' : undefined}
+              aria-invalid={!!usernameError}
             />
+            {usernameError && (
+              <span id="username-error" className="field-error" role="alert">
+                {usernameError}
+              </span>
+            )}
           </label>
           <div className="helper-row">
             <span>3-18 characters, letters and numbers recommended.</span>
@@ -2020,7 +2171,7 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
               {username.length} / 30
             </span>
           </div>
-          <button className="primary-button" type="submit" disabled={isSubmitting}>
+          <button className="primary-button" type="submit" disabled={isSubmitting || !!usernameError}>
             {isSubmitting ? <LoadingSpinner /> : 'Reserve username'}
           </button>
         </form>
