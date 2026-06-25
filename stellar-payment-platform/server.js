@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 require('dotenv').config();
+const rateLimit = require('express-rate-limit');
+const RedisStore = require('rate-limit-redis');
+const { createClient } = require('redis');
 
 const { Horizon, StrKey } = require('@stellar/stellar-sdk');
 const PDFDocument = require('pdfkit');
@@ -37,7 +40,23 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
+const redisClient = createClient({
+  url: process.env.REDIS_URL
+});
+redisClient.connect().catch(console.error);
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  store: new RedisStore({
+    sendCommand: (...args) => redisClient.sendCommand(args),
+  }),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use(cors(corsOptions));
+app.use(limiter);
 // #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
 app.use(express.json({ limit: '10kb' }));
 app.use((err, _req, res, next) => {
