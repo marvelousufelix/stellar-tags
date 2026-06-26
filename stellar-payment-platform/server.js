@@ -209,7 +209,12 @@ const { StrKey } = require('@stellar/stellar-sdk');
 app.post(['/register', '/api/v1/register'], async (req, res, next) => {
 
 app.post('/register', async (req, res, next) => {
+test/integration-suite
  main
+  if (!req.is('application/json')) {
+    return res.status(415).json({ error: "Unsupported Media Type. Please send application/json" });
+  }
+main
   const username = normalizeNameTag(req.body.username);
   const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
 
@@ -219,6 +224,11 @@ app.post('/register', async (req, res, next) => {
 
   if (!username || !address) {
     return res.status(400).json({ error: 'Missing required fields: username and address are both required.' });
+  }
+
+  const usernameLocalPart = username.includes('*') ? username.split('*')[0] : username;
+  if (usernameLocalPart.length < 3) {
+    return res.status(400).json({ error: "Username must be at least 3 characters long." });
   }
 
   if (!StrKey.isValidEd25519PublicKey(address)) {
@@ -252,15 +262,8 @@ app.post('/register', async (req, res, next) => {
       federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
     });
   } catch (error) {
-    // P2002 — unique constraint violation (username or address already taken)
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const target = error.meta?.target;
-      const isAddress = Array.isArray(target)
-        ? target.includes('address')
-        : typeof target === 'string' && target.includes('address');
-      const conflictError = new Error(isAddress ? 'Address already registered' : 'Username already registered');
-      conflictError.statusCode = 409;
-      return next(conflictError);
+    if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('UNIQUE'))) {
+      return res.status(409).json({ error: 'Username is already taken. Please choose another.' });
     }
     const registrationError = new Error('Failed to save registration');
     registrationError.statusCode = 500;
@@ -512,7 +515,23 @@ const gracefulShutdown = (server, pool, signal) => {
     process.exit(0);
   });
 };
+app.use((err, req, res, next) => {
+  // 1. Print the full error stack trace to the console (Viewable in Vercel Logs)
+  console.error('\n❌ CRITICAL BACKEND ERROR:');
+  console.error(err.stack);
+  console.error('============================\n');
 
+  // 2. Determine the status code (default to 500 Internal Server Error)
+  const statusCode = err.statusCode || 500;
+
+  // 3. Send a clean JSON response to the frontend so the request doesn't hang forever
+  res.status(statusCode).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
+    // Only send the raw error details to the frontend if you are testing locally
+    detail: process.env.NODE_ENV === 'development' ? err.stack : 'Check server logs for details'
+  });
+});
 if (require.main === module) {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server successfully initialized on port ${PORT}`);
