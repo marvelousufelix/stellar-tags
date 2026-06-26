@@ -15,6 +15,12 @@ jest.mock('pdfkit', () => jest.fn());
 
 jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
 
+jest.mock('bad-words', () => {
+  return jest.fn().mockImplementation(() => ({
+    isProfane: jest.fn(() => false),
+  }));
+});
+
 jest.mock('sqlite3', () => ({
   verbose: () => ({
     Database: jest.fn().mockImplementation((_path, cb) => {
