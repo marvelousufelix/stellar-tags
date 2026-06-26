@@ -793,6 +793,11 @@ function Dashboard({
     }
   };
 
+  const handleMaxClick = () => {
+    const maxSpendable = Math.max(0, parseFloat(balance) - 1.00001)
+    setAmount(maxSpendable.toFixed(5).toString())
+  }
+
   const handleDisconnect = () => {
     setIsWalletMenuOpen(false);
     onDisconnectWallet();
