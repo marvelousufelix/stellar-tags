@@ -190,7 +190,8 @@ const [activeView, setActiveView] = useState('dashboard')
           >
             ⚠️ You are currently offline. Transactions will fail.
           </div>
-        )}        <Suspense fallback={<ViewFallback label="Loading registration..." />}>
+        )}
+        <Suspense fallback={<ViewFallback label="Loading registration..." />}>
 
         <RegistrationPage
           userPublicKey={userPublicKey}
@@ -222,7 +223,8 @@ const [activeView, setActiveView] = useState('dashboard')
           >
             ⚠️ You are currently offline. Transactions will fail.
           </div>
-        )}        <Suspense fallback={<ViewFallback label="Loading help center..." />}>
+        )}
+        <Suspense fallback={<ViewFallback label="Loading help center..." />}>
 
         <HelpPage
           userPublicKey={userPublicKey}
@@ -258,7 +260,8 @@ const [activeView, setActiveView] = useState('dashboard')
           >
             ⚠️ You are currently offline. Transactions will fail.
           </div>
-        )}        <Suspense fallback={<ViewFallback label="Loading analytics..." />}>
+        )}
+        <Suspense fallback={<ViewFallback label="Loading analytics..." />}>
 
         <AnalyticsPage
           userPublicKey={userPublicKey}
@@ -294,7 +297,8 @@ const [activeView, setActiveView] = useState('dashboard')
           >
             ⚠️ You are currently offline. Transactions will fail.
           </div>
-        )}        <Suspense fallback={<ViewFallback label="Loading history..." />}>
+        )}
+        <Suspense fallback={<ViewFallback label="Loading history..." />}>
 
         <HistoryPage
           userPublicKey={userPublicKey}
@@ -331,7 +335,8 @@ const [activeView, setActiveView] = useState('dashboard')
         >
           ⚠️ You are currently offline. Transactions will fail.
         </div>
-      )}        <Suspense fallback={<ViewFallback label="Loading dashboard..." />}>
+      )}
+        <Suspense fallback={<ViewFallback label="Loading dashboard..." />}>
 
       <Dashboard
         userPublicKey={userPublicKey}
