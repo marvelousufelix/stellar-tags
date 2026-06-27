@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 require('dotenv').config();
+const rateLimit = require('express-rate-limit');
+const RedisStore = require('rate-limit-redis');
+const { createClient } = require('redis');
 
 const { Horizon, StrKey } = require('@stellar/stellar-sdk');
 const PDFDocument = require('pdfkit');
@@ -37,7 +40,25 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
+const redisClient = process.env.REDIS_URL ? createClient({
+  url: process.env.REDIS_URL
+}) : null;
+if (redisClient) {
+  redisClient.connect().catch(console.error);
+}
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  store: redisClient ? new RedisStore({
+    sendCommand: (...args) => redisClient.sendCommand(args),
+  }) : undefined,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use(cors(corsOptions));
+app.use(limiter);
 // #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
 app.use(express.json({ limit: '10kb' }));
 app.use((err, _req, res, next) => {
@@ -148,7 +169,7 @@ app.get(['/federation', '/api/v1/federation'], etagCache, async (req, res, next)
       // Reverse lookup: search by Stellar address (case-insensitive)
       const row = await prisma.user.findFirst({
         where: { address: { equals: queryValue, mode: 'insensitive' } },
-        select: { username: true, address: true },
+        select: { username: true, address: true, memoType: true, memo: true },
       });
 
       if (!row) {
@@ -157,13 +178,15 @@ app.get(['/federation', '/api/v1/federation'], etagCache, async (req, res, next)
         return next(notFoundError);
       }
 
-      // Return federation response for address lookup
-      return res.json({
+      const response = {
         stellar_address: `${row.username}*${process.env.DOMAIN || 'localhost'}`,
         account_id: row.address,
-        memo_type: 'text',
-        memo: 'PlatformPayment',
-      });
+      };
+      if (row.memoType) {
+        response.memo_type = row.memoType;
+        response.memo = row.memo;
+      }
+      return res.json(response);
     } else if (type === 'name' || !type) {
       // Default: lookup by username (backward compatible)
       // Normalize the name tag (e.g., "alice*localhost") and lowercase it.
@@ -172,7 +195,7 @@ app.get(['/federation', '/api/v1/federation'], etagCache, async (req, res, next)
 
       const row = await prisma.user.findUnique({
         where: { username: queryName },
-        select: { address: true },
+        select: { address: true, memoType: true, memo: true },
       });
 
       // Fallback to hardcoded USER_DATABASE for backward compatibility
@@ -184,12 +207,15 @@ app.get(['/federation', '/api/v1/federation'], etagCache, async (req, res, next)
         return next(notFoundError);
       }
 
-      return res.json({
+      const response = {
         stellar_address: address,
         account_id: address,
-        memo_type: 'text',
-        memo: 'PlatformPayment',
-      });
+      };
+      if (row?.memoType) {
+        response.memo_type = row.memoType;
+        response.memo = row.memo;
+      }
+      return res.json(response);
     } else {
       // Unsupported type parameter
       return res.status(400).json({
@@ -207,6 +233,30 @@ test/integration-suite
 const { StrKey } = require('@stellar/stellar-sdk');
 
 app.post(['/register', '/api/v1/register'], async (req, res, next) => {
+const VALID_MEMO_TYPES = ['text', 'id', 'hash'];
+const MEMO_ID_RE = /^\d+$/;
+const MEMO_HASH_RE = /^[0-9a-fA-F]{64}$/;
+
+const validateMemo = (memoType, memo) => {
+  if (!memoType && !memo) return null;
+  if (memoType && !memo) return 'memo is required when memo_type is provided.';
+  if (!memoType && memo) return 'memo_type is required when memo is provided.';
+  if (!VALID_MEMO_TYPES.includes(memoType)) {
+    return `memo_type must be one of: ${VALID_MEMO_TYPES.join(', ')}.`;
+  }
+  if (memoType === 'text' && Buffer.byteLength(memo, 'utf8') > 28) {
+    return 'memo of type text must not exceed 28 bytes.';
+  }
+  if (memoType === 'id') {
+    if (!MEMO_ID_RE.test(memo) || BigInt(memo) > 18446744073709551615n) {
+      return 'memo of type id must be a valid 64-bit unsigned integer.';
+    }
+  }
+  if (memoType === 'hash' && !MEMO_HASH_RE.test(memo)) {
+    return 'memo of type hash must be a 64-character hex string (32 bytes).';
+  }
+  return null;
+};
 
 app.post('/register', async (req, res, next) => {
 test/integration-suite
@@ -217,6 +267,8 @@ test/integration-suite
 main
   const username = normalizeNameTag(req.body.username);
   const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
+  const memoType = typeof req.body.memo_type === 'string' ? req.body.memo_type.trim() : undefined;
+  const memo = typeof req.body.memo === 'string' ? req.body.memo.trim() : undefined;
 
   if (address.toUpperCase().startsWith('S')) {
     return res.status(400).json({ error: "Never share your Secret Key. Please register using your Public Key (starts with G)." });
@@ -237,6 +289,11 @@ main
     return next(error);
   }
 
+  const memoError = validateMemo(memoType, memo);
+  if (memoError) {
+    return res.status(400).json({ error: memoError });
+  }
+
   // Convert to lowercase for case-insensitive storage
   const normalizedUsername = username.toLowerCase();
 
@@ -252,7 +309,11 @@ main
     }
 
     await prisma.user.create({
-      data: { username: normalizedUsername, address },
+      data: {
+        username: normalizedUsername,
+        address,
+        ...(memoType && { memoType, memo }),
+      },
     });
 
     return res.status(201).json({
@@ -260,6 +321,7 @@ main
       username: normalizedUsername,
       address,
       federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
+      ...(memoType && { memo_type: memoType, memo }),
     });
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('UNIQUE'))) {
@@ -465,7 +527,7 @@ app.use((err, _req, _res, next) => {
 });
 
 // Global error handling middleware
-app.use((err, _req, res, _next) => {
+app.use((err, _req, res) => {
   const statusCode = err.statusCode || 500;
   const errorMessage = err.message || 'Internal server error';
 
@@ -515,7 +577,7 @@ const gracefulShutdown = (server, pool, signal) => {
     process.exit(0);
   });
 };
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
   // 1. Print the full error stack trace to the console (Viewable in Vercel Logs)
   console.error('\n❌ CRITICAL BACKEND ERROR:');
   console.error(err.stack);
