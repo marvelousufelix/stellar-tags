@@ -8,6 +8,7 @@ const xss = require('xss');
 const { Horizon, StrKey } = require('@stellar/stellar-sdk');
 const PDFDocument = require('pdfkit');
 const { prisma } = require('./prismaClient');
+const { verifyMultiSignerThreshold } = require('./src/multisigner-verifier');
 const { scheduleCleanupJob } = require('./src/cleanup-cron');
 const timeout = require('connect-timeout');
 
@@ -251,6 +252,7 @@ app.post('/register', async (req, res, next) => {
   const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
   const memoType = typeof req.body.memo_type === 'string' ? req.body.memo_type.trim() : undefined;
   const memo = typeof req.body.memo === 'string' ? req.body.memo.trim() : undefined;
+  const signature = typeof req.body.signature === 'string' ? req.body.signature.trim() : '';
 
   if (address.toUpperCase().startsWith('S')) {
     return res.status(400).json({ error: "Never share your Secret Key. Please register using your Public Key (starts with G)." });
@@ -276,6 +278,16 @@ app.post('/register', async (req, res, next) => {
     return res.status(400).json({ error: memoError });
   }
 
+  if (!signature) {
+    return res.status(400).json({ error: 'Signature required' });
+  }
+
+  if (!StrKey.isValidEd25519PublicKey(signature)) {
+    const error = new Error('Invalid Stellar Public Key format.');
+    error.statusCode = 400;
+    return next(error);
+  }
+
   const normalizedUsername = username.toLowerCase();
 
   const RESERVED_NAMES = ['admin', 'root', 'support', 'system', 'stellar', 'api', 'help'];
@@ -294,6 +306,18 @@ app.post('/register', async (req, res, next) => {
       return next(conflictError);
     }
 
+    const verificationResult = await verifyMultiSignerThreshold(address, [signature], {
+      operationType: 'management',
+    });
+
+    if (!verificationResult.success) {
+      const verificationError = new Error(
+        verificationResult.errorMessage || 'Signature verification failed'
+      );
+      verificationError.statusCode = 401;
+      throw verificationError;
+    }
+
     await prisma.user.create({
       data: {
         username: normalizedUsername,
@@ -307,6 +331,13 @@ app.post('/register', async (req, res, next) => {
       username: normalizedUsername,
       address,
       federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
+      verification: {
+        accountId: verificationResult.accountId,
+        signerCount: verificationResult.signerCount,
+        thresholdMet: verificationResult.success,
+        requiredThreshold: verificationResult.requiredThreshold,
+        providedWeight: verificationResult.totalWeight,
+      },
       ...(memoType && { memo_type: memoType, memo }),
     });
   } catch (error) {
@@ -527,7 +558,7 @@ app.use((err, _req, _res, next) => {
   next(err);
 });
 
-app.use((err, _req, res) => {
+app.use((err, _req, res, next) => {
   const statusCode = err.statusCode || 500;
   const errorMessage = err.message || 'Internal server error';
 

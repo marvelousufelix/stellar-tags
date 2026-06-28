@@ -13,6 +13,19 @@ jest.mock('pdfkit', () => jest.fn());
 // test process does not register a real timer.
 jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
 
+jest.mock('./prismaClient', () => ({
+  prisma: {
+    user: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      create: jest.fn(),
+      findFirst: jest.fn(),
+    },
+    $transaction: jest.fn(),
+  },
+}));
+
 jest.mock('sqlite3', () => ({
   verbose: () => ({
     Database: jest.fn().mockImplementation((_path, cb) => {

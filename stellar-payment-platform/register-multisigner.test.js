@@ -27,6 +27,18 @@ jest.mock('@stellar/stellar-sdk', () => ({
 jest.mock('pdfkit', () => jest.fn());
 
 jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
+jest.mock('./prismaClient', () => ({
+  prisma: {
+    user: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
+    $transaction: jest.fn(),
+  },
+}));
 
 jest.mock('generic-pool', () => ({
   createPool: jest.fn(() => ({
@@ -78,20 +90,32 @@ jest.mock('./src/multisigner-verifier', () => ({
 describe('POST /register - Multi-Signer Threshold Verification', () => {
   let app;
   let mockPool;
+  let prisma;
   let verifyMultiSignerThreshold;
   const { Horizon } = require('@stellar/stellar-sdk');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
     jest.clearAllMocks();
 
     // Import after mocks are set
-    app = require('./server');
+    ({ app } = require('./server'));
+    ({ prisma } = require('./prismaClient'));
     verifyMultiSignerThreshold = require('./src/multisigner-verifier').verifyMultiSignerThreshold;
+
+    prisma.user.findUnique.mockReset();
+    prisma.user.create.mockReset();
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({
+      username: 'alice*localhost',
+      address: 'GDZST3XVCDTUJ76ZAV2HA72KYQM3DGLLFVDNNZ6XTQCR3BQFGMQ25E4Z',
+      memoType: null,
+      memo: null,
+    });
 
     // Mock pool
     const genericPool = require('generic-pool');
-    mockPool = genericPool.createPool().acquire();
+    mockPool = await genericPool.createPool().acquire();
   });
 
   describe('Validation Tests', () => {
@@ -161,7 +185,7 @@ describe('POST /register - Multi-Signer Threshold Verification', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.ok).toBe(true);
-      expect(response.body.username).toBe('alice');
+      expect(response.body.username).toBe('alice*localhost');
       expect(response.body.address).toBe(accountId);
       expect(response.body.verification.thresholdMet).toBe(true);
       expect(verifyMultiSignerThreshold).toHaveBeenCalledWith(
@@ -274,11 +298,7 @@ describe('POST /register - Multi-Signer Threshold Verification', () => {
     it('should reject duplicate address registration', async () => {
       const accountId = 'GDZST3XVCDTUJ76ZAV2HA72KYQM3DGLLFVDNNZ6XTQCR3BQFGMQ25E4Z';
       
-      // Mock database to return existing record
-      mockPool.get.mockImplementation(function (...args) {
-        const fn = args.find((a) => typeof a === 'function');
-        if (fn) fn.call(this, null, { username: 'existing' });
-      });
+      prisma.user.findUnique.mockResolvedValue({ username: 'existing' });
 
       const response = await request(app)
         .post('/register')
@@ -405,7 +425,7 @@ describe('POST /register - Multi-Signer Threshold Verification', () => {
         });
 
       expect(response.status).toBe(201);
-      expect(response.body.username).toBe('alice');
+      expect(response.body.username).toBe('alice*localhost');
     });
   });
 });
