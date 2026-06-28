@@ -221,7 +221,6 @@ describe('GET /lookup — pagination and search', () => {
   });
 
   test('exact address lookup returns single record (backward compat)', async () => {
- #54-Refactor-API-Route-Architecture-to-Support-Explicit-Versioning-(/api/v1)-FIX
     const res = await request(app).get(`/api/v1/lookup?address=${VALID_ADDRESS}`);
 
     prisma.user.findUnique.mockResolvedValue({ username: 'alice*localhost' });
@@ -234,7 +233,6 @@ describe('GET /lookup — pagination and search', () => {
   });
 
   test('search mode returns paginated metadata block', async () => {
- #54-Refactor-API-Route-Architecture-to-Support-Explicit-Versioning-(/api/v1)-FIX
     const res = await request(app).get('/api/v1/lookup?search=alice&page=1&limit=10');
 
     prisma.user.count.mockResolvedValue(2);
@@ -253,7 +251,6 @@ describe('GET /lookup — pagination and search', () => {
   });
 
   test('search mode defaults page to 1 and limit to 10 when omitted', async () => {
- #54-Refactor-API-Route-Architecture-to-Support-Explicit-Versioning-(/api/v1)-FIX
     const res = await request(app).get('/api/v1/lookup?search=alice');
 
     prisma.user.count.mockResolvedValue(2);
@@ -338,7 +335,6 @@ describe('POST /register — block secret keys', () => {
     jest.restoreAllMocks();
   });
 
- #54-Refactor-API-Route-Architecture-to-Support-Explicit-Versioning-(/api/v1)-FIX
   test('returns paginated metadata block with default page and limit', async () => {
     const res = await request(app).get('/api/v1/users');
     expect(res.status).toBe(200);
