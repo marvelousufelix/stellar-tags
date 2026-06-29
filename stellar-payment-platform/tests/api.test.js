@@ -1,4 +1,11 @@
 const request = require('supertest');
+
+// Mock the Stellar SDK to prevent Jest ESM syntax errors
+jest.mock('@stellar/stellar-sdk', () => ({
+  Horizon: { Server: jest.fn() },
+  StrKey: { isValidEd25519PublicKey: jest.fn(() => true) }
+}));
+
 const { app } = require('../server');
 
 describe('GET /federation', () => {

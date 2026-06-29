@@ -7,12 +7,10 @@
     "start": "node server.js",
     "dev": "node server.js",
     "listener": "node horizonListener.js",
-    "test": "jest"
+    "test": "jest --forceExit"
   },
   "jest": {
-    "testEnvironment": "node",
-    "test": "jest --forceExit",
-    "listener": "node horizonListener.js"
+    "testEnvironment": "node"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
