@@ -514,7 +514,9 @@ app.use((err, _req, _res, next) => {
   next(err);
 });
 
-app.use((err, _req, res, next) => {
+// Global error handling middleware
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
   const statusCode = err.statusCode || 500;
   const errorMessage = err.message || 'Internal server error';
 
@@ -531,12 +533,11 @@ app.use((err, _req, res, next) => {
   return res.status(statusCode).json({
     success: false,
     error: errorMessage,
-    statusCode,
+    statusCode: statusCode,
   });
 });
 
 const SHUTDOWN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_TIMEOUT_MS, 10) || 10_000;
-
 let isShuttingDown = false;
 
 const gracefulShutdown = (server, pool, signal) => {
@@ -561,6 +562,9 @@ const gracefulShutdown = (server, pool, signal) => {
     process.exit(0);
   });
 };
+
+
+
 app.use((err, req, res) => {
   console.error(err.stack);
   const statusCode = err.statusCode || 500;
@@ -571,6 +575,7 @@ app.use((err, req, res) => {
     detail: process.env.NODE_ENV === 'development' ? err.stack : 'Check server logs for details'
   });
 });
+
 if (require.main === module) {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server successfully initialized on port ${PORT}`);
@@ -592,4 +597,4 @@ if (require.main === module) {
   process.on('SIGINT', (sig) => gracefulShutdown(server, prismaPool, sig));
 }
 
-module.exports = { app, prisma, gracefulShutdown, rejectNestedObjects };
+module.exports = { app, gracefulShutdown, rejectNestedObjects };
