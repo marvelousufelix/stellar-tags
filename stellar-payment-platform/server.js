@@ -470,8 +470,9 @@ app.post('/register', async (req, res, next) => {
         }
       } else {
         const claimedSigner = verifyFreighterRegistrationSignature({
-          username: normalizedUsername,
-          address,
+          // 👇 Use the exact raw strings the frontend signed
+          username: req.body.username, 
+          address: req.body.address,   
           signature,
           signerAddress,
         });
