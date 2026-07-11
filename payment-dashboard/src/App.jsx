@@ -54,9 +54,24 @@ const [activeView, setActiveView] = useState('dashboard')
       return { ok: false, error: "Wallet connection failed." };
     }
 
-    localStorage.setItem("walletPublicKey", response.address);
-    setUserPublicKey(response.address);
-    return { ok: true, address: response.address };
+    const publicKey = response.address;
+    try {
+      const apiUrl = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+      
+      const dbResponse = await fetch(`${apiUrl}/lookup?address=${publicKey}`);
+      
+      if (dbResponse.ok) {
+        setRegistrationState("existing");
+      } else if (dbResponse.status === 404) {
+        setRegistrationState("new");
+      }
+    } catch (error) {
+      console.error("Failed to verify wallet with database:", error);
+    }
+    
+    localStorage.setItem("walletPublicKey", publicKey);
+    setUserPublicKey(publicKey);
+    return { ok: true, address: publicKey };
   };
 
   const handleDisconnectWallet = () => {
