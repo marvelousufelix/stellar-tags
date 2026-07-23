@@ -35,7 +35,7 @@ router.get('/federation', etagCache, async (req, res, next) => {
         response.memo_type = row.memoType;
         response.memo = row.memo;
       }
-      return res.json(response);
+      return res.json({ status: 'success', data: response });
     } else if (type === 'name' || !type) {
       const nameTag = normalizeNameTag(queryValue);
       const queryName = nameTag.toLowerCase();
@@ -61,10 +61,11 @@ router.get('/federation', etagCache, async (req, res, next) => {
         response.memo_type = row.memoType;
         response.memo = row.memo;
       }
-      return res.json(response);
+      return res.json({ status: 'success', data: response });
     } else {
       return res.status(400).json({
-        error: "Unsupported query type. Supported types: 'id', 'name'",
+        status: 'fail',
+        data: { type: "Unsupported query type. Supported types: 'id', 'name'" },
       });
     }
   } catch {

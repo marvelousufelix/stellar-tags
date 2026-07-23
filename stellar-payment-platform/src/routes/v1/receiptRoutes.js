@@ -11,7 +11,7 @@ router.get('/receipts/:txHash', async (req, res) => {
   const { txHash } = req.params;
 
   if (!TX_HASH_RE.test(txHash)) {
-    return res.status(400).json({ detail: 'Invalid transaction hash format' });
+    return res.status(400).json({ status: 'fail', data: { txHash: 'Invalid transaction hash format' } });
   }
 
   let tx;
@@ -25,9 +25,9 @@ router.get('/receipts/:txHash', async (req, res) => {
     ]);
   } catch (err) {
     if (err && err.response && err.response.status === 404) {
-      return res.status(404).json({ detail: 'Transaction not found' });
+      return res.status(404).json({ status: 'fail', data: { txHash: 'Transaction not found' } });
     }
-    return res.status(500).json({ detail: 'Failed to fetch transaction' });
+    return res.status(500).json({ status: 'error', message: 'Failed to fetch transaction' });
   }
 
   const timestamp = tx.created_at

@@ -34,7 +34,7 @@ const validateMemo = (memoType, memo) => {
 
 router.post('/register', async (req, res, next) => {
   if (!req.is('application/json')) {
-    return res.status(415).json({ error: "Unsupported Media Type. Please send application/json" });
+    return res.status(415).json({ status: 'fail', data: { contentType: "Unsupported Media Type. Please send application/json" } });
   }
   const safeUsername = xss(req.body.username);
   const username = normalizeNameTag(safeUsername);
@@ -44,16 +44,16 @@ router.post('/register', async (req, res, next) => {
   const signature = typeof req.body.signature === 'string' ? req.body.signature.trim() : '';
 
   if (address.toUpperCase().startsWith('S')) {
-    return res.status(400).json({ error: "Never share your Secret Key. Please register using your Public Key (starts with G)." });
+    return res.status(400).json({ status: 'fail', data: { address: "Never share your Secret Key. Please register using your Public Key (starts with G)." } });
   }
 
   if (!username || !address) {
-    return res.status(400).json({ error: 'Missing required fields: username and address are both required.' });
+    return res.status(400).json({ status: 'fail', data: { username: 'Missing required fields: username and address are both required.' } });
   }
 
   const usernameLocalPart = username.includes('*') ? username.split('*')[0] : username;
   if (usernameLocalPart.length < 3) {
-    return res.status(400).json({ error: "Username must be at least 3 characters long." });
+    return res.status(400).json({ status: 'fail', data: { username: "Username must be at least 3 characters long." } });
   }
 
   if (!StrKey.isValidEd25519PublicKey(address)) {
@@ -64,7 +64,7 @@ router.post('/register', async (req, res, next) => {
 
   const memoError = validateMemo(memoType, memo);
   if (memoError) {
-    return res.status(400).json({ error: memoError });
+    return res.status(400).json({ status: 'fail', data: { memo: memoError } });
   }
 
   if (signature && !StrKey.isValidEd25519PublicKey(signature)) {
@@ -77,7 +77,7 @@ router.post('/register', async (req, res, next) => {
 
   const RESERVED_NAMES = ['admin', 'root', 'support', 'system', 'stellar', 'api', 'help'];
   if (RESERVED_NAMES.includes(normalizedUsername)) {
-    return res.status(403).json({ error: "This username is reserved and cannot be registered." });
+    return res.status(403).json({ status: 'fail', data: { username: "This username is reserved and cannot be registered." } });
   }
 
   try {
@@ -115,24 +115,26 @@ router.post('/register', async (req, res, next) => {
     });
 
     return res.status(201).json({
-      ok: true,
-      username: normalizedUsername,
-      address,
-      federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
-      ...(verificationResult && {
-        verification: {
-          accountId: verificationResult.accountId,
-          signerCount: verificationResult.signerCount,
-          thresholdMet: verificationResult.success,
-          requiredThreshold: verificationResult.requiredThreshold,
-          providedWeight: verificationResult.totalWeight,
-        },
-      }),
-      ...(memoType && { memo_type: memoType, memo }),
+      status: 'success',
+      data: {
+        username: normalizedUsername,
+        address,
+        federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
+        ...(verificationResult && {
+          verification: {
+            accountId: verificationResult.accountId,
+            signerCount: verificationResult.signerCount,
+            thresholdMet: verificationResult.success,
+            requiredThreshold: verificationResult.requiredThreshold,
+            providedWeight: verificationResult.totalWeight,
+          },
+        }),
+        ...(memoType && { memo_type: memoType, memo }),
+      },
     });
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('UNIQUE'))) {
-      return res.status(409).json({ error: 'Username is already taken. Please choose another.' });
+      return res.status(409).json({ status: 'fail', data: { username: 'Username is already taken. Please choose another.' } });
     }
     
     if (error.message && error.message.includes('Account not found')) {
@@ -152,7 +154,7 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-router.all('/register', (req, res) => res.status(405).json({ error: "Method Not Allowed" }));
+router.all('/register', (req, res) => res.status(405).json({ status: 'fail', data: { method: "Method Not Allowed" } }));
 
 // #18 — Soft-delete endpoint. Sets deleted_at to now() instead of running a
 // hard DELETE so the row is preserved for historical auditing.
@@ -183,7 +185,7 @@ router.delete('/register/:username', async (req, res, next) => {
       data: { deletedAt: new Date() },
     });
 
-    return res.status(200).json({ ok: true, username, deleted: true });
+    return res.status(200).json({ status: 'success', data: { username, deleted: true } });
   } catch {
     const dbError = new Error('Failed to unregister account');
     dbError.statusCode = 500;
@@ -214,7 +216,7 @@ router.get('/lookup', async (req, res, next) => {
         return next(notFoundError);
       }
 
-      return res.json({ username: row.username, address });
+      return res.json({ status: 'success', data: { username: row.username, address } });
     } catch {
       const dbError = new Error('Database lookup failed');
       dbError.statusCode = 500;
@@ -252,7 +254,7 @@ router.get('/lookup', async (req, res, next) => {
       created_at: user.createdAt.toISOString(),
     }));
 
-    return res.json({ data, totalCount, totalPages, currentPage: page });
+    return res.json({ status: 'success', data: { data, totalCount, totalPages, currentPage: page } });
   } catch {
     const dbError = new Error('Database lookup failed');
     dbError.statusCode = 500;
@@ -294,7 +296,7 @@ router.get('/users', async (req, res, next) => {
       created_at: user.createdAt.toISOString(),
     }));
 
-    res.json({ data, totalCount, totalPages, currentPage: page });
+    res.json({ status: 'success', data: { data, totalCount, totalPages, currentPage: page } });
   } catch {
     const dbError = new Error('Database error');
     dbError.statusCode = 500;

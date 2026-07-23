@@ -24,7 +24,7 @@ const app = express();
 app.use(timeout('10s'));
 app.use((err, req, res, next) => {
   if (req.timedout) {
-    return res.status(503).json({ error: 'Service Unavailable' });
+    return res.status(503).json({ status: 'error', message: 'Service Unavailable' });
   }
   next(err);
 });
@@ -71,7 +71,7 @@ const limiter = rateLimit({
   }) : undefined,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' },
+  message: { status: 'fail', data: { rateLimit: 'Too many requests, please try again later.' } },
 });
 
 app.use(cors(corsOptions));
@@ -79,7 +79,7 @@ app.use(limiter);
 app.use(express.json({ limit: '10kb' }));
 app.use((err, _req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).json({ error: 'Malformed JSON payload' });
+    return res.status(400).json({ status: 'fail', data: { body: 'Malformed JSON payload' } });
   }
   next(err);
 });
@@ -94,7 +94,7 @@ const rejectNestedObjects = (req, res, next) => {
         if (!isPrimitive(val)) {
           return res
             .status(400)
-            .json({ detail: 'Invalid parameter type: nested objects and arrays are not allowed.' });
+            .json({ status: 'fail', data: { params: 'Invalid parameter type: nested objects and arrays are not allowed.' } });
         }
       }
     }
@@ -256,7 +256,7 @@ app.get('/federation', etagCache, async (req, res, next) => {
         response.memo_type = row.memoType;
         response.memo = row.memo;
       }
-      return res.json(response);
+      return res.json({ status: 'success', data: response });
     } else if (type === 'name' || !type) {
       const nameTag = normalizeNameTag(queryValue);
       const queryName = nameTag.toLowerCase();
@@ -294,10 +294,11 @@ app.get('/federation', etagCache, async (req, res, next) => {
         response.memo_type = row.memoType;
         response.memo = row.memo;
       }
-      return res.json(response);
+      return res.json({ status: 'success', data: response });
     } else {
       return res.status(400).json({
-        error: "Unsupported query type. Supported types: 'id', 'name'",
+        status: 'fail',
+        data: { type: "Unsupported query type. Supported types: 'id', 'name'" },
       });
     }
   } catch {
@@ -396,7 +397,7 @@ const verifyFreighterRegistrationSignature = ({
  */
 app.post('/register', async (req, res, next) => {
   if (!req.is('application/json')) {
-    return res.status(415).json({ error: "Unsupported Media Type. Please send application/json" });
+    return res.status(415).json({ status: 'fail', data: { contentType: "Unsupported Media Type. Please send application/json" } });
   }
   const safeUsername = xss(req.body.username);
   const username = normalizeNameTag(safeUsername);
@@ -407,23 +408,23 @@ app.post('/register', async (req, res, next) => {
   const signerAddress = typeof req.body.signerAddress === 'string' ? req.body.signerAddress.trim() : '';
 
   if (address.toUpperCase().startsWith('S')) {
-    return res.status(400).json({ error: "Never share your Secret Key. Please register using your Public Key (starts with G)." });
+    return res.status(400).json({ status: 'fail', data: { address: "Never share your Secret Key. Please register using your Public Key (starts with G)." } });
   }
 
   if (!username || !address) {
-    return res.status(400).json({ error: 'Missing required fields: username and address are both required.' });
+    return res.status(400).json({ status: 'fail', data: { username: 'Missing required fields: username and address are both required.' } });
   }
 
   // Extract the username part before the * for profanity check and length validation
   const usernameLocalPart = username.includes('*') ? username.split('*')[0] : username;
 
   if (usernameLocalPart.length < 3) {
-    return res.status(400).json({ error: "Username must be at least 3 characters long." });
+    return res.status(400).json({ status: 'fail', data: { username: "Username must be at least 3 characters long." } });
   }
 
   // Reject usernames containing profanity or offensive words.
   if (profanityFilter.isProfane(usernameLocalPart)) {
-    return res.status(400).json({ error: 'Username contains restricted words' });
+    return res.status(400).json({ status: 'fail', data: { username: 'Username contains restricted words' } });
   }
 
   if (!StrKey.isValidEd25519PublicKey(address)) {
@@ -434,14 +435,14 @@ app.post('/register', async (req, res, next) => {
 
   const memoError = validateMemo(memoType, memo);
   if (memoError) {
-    return res.status(400).json({ error: memoError });
+    return res.status(400).json({ status: 'fail', data: { memo: memoError } });
   }
 
   const normalizedUsername = username.toLowerCase();
 
   const RESERVED_NAMES = ['admin', 'root', 'support', 'system', 'stellar', 'api', 'help'];
   if (RESERVED_NAMES.includes(normalizedUsername)) {
-    return res.status(403).json({ error: "This username is reserved and cannot be registered." });
+    return res.status(403).json({ status: 'fail', data: { username: "This username is reserved and cannot be registered." } });
   }
 
   try {
@@ -532,24 +533,26 @@ app.post('/register', async (req, res, next) => {
     }
 
     return res.status(201).json({
-      ok: true,
-      username: normalizedUsername,
-      address,
-      federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
-      ...(verificationResult && {
-        verification: {
-          accountId: verificationResult.accountId,
-          signerCount: verificationResult.signerCount,
-          thresholdMet: verificationResult.success,
-          requiredThreshold: verificationResult.requiredThreshold,
-          providedWeight: verificationResult.totalWeight,
-        },
-      }),
-      ...(memoType && { memo_type: memoType, memo }),
+      status: 'success',
+      data: {
+        username: normalizedUsername,
+        address,
+        federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
+        ...(verificationResult && {
+          verification: {
+            accountId: verificationResult.accountId,
+            signerCount: verificationResult.signerCount,
+            thresholdMet: verificationResult.success,
+            requiredThreshold: verificationResult.requiredThreshold,
+            providedWeight: verificationResult.totalWeight,
+          },
+        }),
+        ...(memoType && { memo_type: memoType, memo }),
+      },
     });
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('UNIQUE'))) {
-      return res.status(409).json({ error: 'Username is already taken. Please choose another.' });
+      return res.status(409).json({ status: 'fail', data: { username: 'Username is already taken. Please choose another.' } });
     }
     
     // Handle verification errors
@@ -572,7 +575,7 @@ app.post('/register', async (req, res, next) => {
   }
 });
 
-app.all('/register', (req, res) => res.status(405).json({ error: "Method Not Allowed" }));
+app.all('/register', (req, res) => res.status(405).json({ status: 'fail', data: { method: "Method Not Allowed" } }));
 
 // #18 — Soft-delete endpoint. Sets deleted_at to now() instead of running a
 // hard DELETE so the row is preserved for historical auditing.
@@ -603,7 +606,7 @@ app.delete('/register/:username', async (req, res, next) => {
       data: { deletedAt: new Date() },
     });
 
-    return res.status(200).json({ ok: true, username, deleted: true });
+    return res.status(200).json({ status: 'success', data: { username, deleted: true } });
   } catch {
     const dbError = new Error('Failed to unregister account');
     dbError.statusCode = 500;
@@ -643,7 +646,7 @@ app.get('/lookup', async (req, res, next) => {
         return next(notFoundError);
       }
 
-      return res.json({ username: row.username, address });
+      return res.json({ status: 'success', data: { username: row.username, address } });
     } catch (err) {  // <-- 1. Add (err) here
       // 2. Add this console.log to print the exact reason Prisma is failing
       console.error("🚨 ACTUAL PRISMA ERROR:", err); 
@@ -697,7 +700,7 @@ app.get('/lookup', async (req, res, next) => {
       response = await listLocalUsers(search, page, limit);
     }
 
-    return res.json(response);
+    return res.json({ status: 'success', data: response });
   } catch {
     const dbError = new Error('Database lookup failed');
     dbError.statusCode = 500;
@@ -739,7 +742,7 @@ app.get('/users', async (req, res, next) => {
       created_at: user.createdAt.toISOString(),
     }));
 
-    res.json({ data, totalCount, totalPages, currentPage: page });
+    res.json({ status: 'success', data: { data, totalCount, totalPages, currentPage: page } });
   } catch {
     const dbError = new Error('Database error');
     dbError.statusCode = 500;
@@ -757,7 +760,7 @@ app.get('/.well-known/stellar.toml', (_req, res) => {
 });
 
 app.get('/api/v1/time', (_req, res) => {
-  res.status(200).json({ time: new Date().toISOString() });
+  res.status(200).json({ status: 'success', data: { time: new Date().toISOString() } });
 });
 
 app.get('/health', async (_req, res) => {
@@ -779,8 +782,6 @@ app.use((err, _req, _res, next) => {
   }
   next(err);
 });
-
-// Global error handling middleware
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
   const statusCode = err.statusCode || 500;
@@ -792,17 +793,17 @@ app.use((err, req, res, _next) => {
     // be traced across every log line it produced.
     console.error(`[Correlation ID: ${req.correlationId}] [Error ID: ${errorId}]`, err);
     return res.status(500).json({
-      success: false,
-      error: 'Internal Server Error',
+      status: 'error',
+      message: 'Internal Server Error',
       reference_id: errorId,
-      correlation_id: req.correlationId
+      correlation_id: req.correlationId,
     });
   }
 
+  // 4xx client errors → JSend "fail"
   return res.status(statusCode).json({
-    success: false,
-    error: errorMessage,
-    statusCode: statusCode,
+    status: 'fail',
+    data: { message: errorMessage },
   });
 });
 
