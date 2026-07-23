@@ -721,8 +721,15 @@ app.get('/api/v1/time', (_req, res) => {
   res.status(200).json({ time: new Date().toISOString() });
 });
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
+app.get('/health', async (_req, res) => {
+  try {
+    // Lightweight sanity check — confirms the DB connection is alive
+    await prisma.$queryRaw`SELECT 1`;
+    return res.status(200).json({ status: 'UP', timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error('Health check DB error:', err.message);
+    return res.status(503).json({ status: 'DOWN', timestamp: new Date().toISOString() });
+  }
 });
 
 app.use((err, _req, _res, next) => {
@@ -736,7 +743,7 @@ app.use((err, _req, _res, next) => {
 
 // Global error handling middleware
 // eslint-disable-next-line no-unused-vars
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   const statusCode = err.statusCode || 500;
   const errorMessage = err.message || 'Internal server error';
 
